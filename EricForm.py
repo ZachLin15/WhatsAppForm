@@ -30,7 +30,7 @@ sender_email = "admin1@lshworld.com"  # Replace with your email
 sender_password = "dpvqmxwsrxvxmbvr"  # Replace with your password or app password
 receiver_email = ['cs4@lshworld.com']
 
-logging.basicConfig(filename=r'C:\Users\USER\ImportOracle\pythonProject1\Log\Simplr_WS5_Import.log',level=logging.INFO,
+logging.basicConfig(filename=r'C:\Users\Admin\PycharmProjects\WhatsAppForm\Log\Simplr_WS5_Import.log',level=logging.INFO,
                       # Set log level to DEBUG
                     format='%(asctime)s - %(levelname)s - %(message)s')
 console_handler = logging.StreamHandler()  # Create a console handler
@@ -38,7 +38,7 @@ console_handler.setLevel(logging.DEBUG)  # Set console handler level to DEBUG
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logging.getLogger('').addHandler(console_handler)
 
-exceldata = r"C:\Users\USER\ImportOracle\pythonProject1\dist\data5.xlsx"
+exceldata = r"C:\Users\Admin\PycharmProjects\WhatsAppForm\dist\data5.xlsx"
 
 def GetLastestCustomer(exceldata):
     url= "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6DOQzaBXUQ24qx2tOlE1sjK3ZEBdYxAoAbudQVNLl6GvVPqgza5QmMUMZhaU4vUYsb7rpuaJ3W4tN/pub?output=xlsx"
@@ -56,169 +56,261 @@ def GetLastestCustomer(exceldata):
 def Output(sheet,combine_df):
     url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6DOQzaBXUQ24qx2tOlE1sjK3ZEBdYxAoAbudQVNLl6GvVPqgza5QmMUMZhaU4vUYsb7rpuaJ3W4tN/pub?output=xlsx"
 
-    try:
-        # Fetch data from Google Sheets
-        response = requests.get(url)
-        response.raise_for_status()
 
-        # Read the specific sheet "Eric Ordering Form"
-        with open(exceldata, "wb") as file:
-            file.write(response.content)
+    # Fetch data from Google Sheets
+    response = requests.get(url)
+    response.raise_for_status()
 
-        data = pd.read_excel(exceldata, sheet_name=sheet)
+    # Read the specific sheet "Eric Ordering Form"
+    with open(exceldata, "wb") as file:
+        file.write(response.content)
+
+    data = pd.read_excel(exceldata, sheet_name=sheet)
 
 
-        # Promote headers (assuming first row is headers)
-        if data.empty:
-            return pd.DataFrame()
+    # Promote headers (assuming first row is headers)
 
-        # Convert Submission Date to datetime if it exists
-        if 'Submission Date' in data.columns:
-            data['Submission Date'] = pd.to_datetime(data['Submission Date'], errors='coerce')
 
-        # Unpivot columns (melt the dataframe)
-        df_melted = data.melt(var_name='Attribute', value_name='Value')
+    # Convert Submission Date to datetime if it exists
+    if 'Submission Date' in data.columns:
+        data['Submission Date'] = pd.to_datetime(data['Submission Date'], errors='coerce')
 
-        # Split Attribute by '>>' - First split
-        df_melted[['Attribute.1', 'temp1']] = df_melted['Attribute'].str.split('>>', n=1, expand=True)
+    data = data.dropna(axis=1, how='all')
 
-        # Split temp1 by '>>' - Second split
-        df_melted[['Attribute.2', 'Attribute.3']] = df_melted['temp1'].str.split('>>', n=1, expand=True)
+    # Unpivot columns (melt the dataframe)
+    columns_to_combine =[]
+    headers1 = data.columns.tolist()
+    for col in headers1:
+        if str(col).__contains__("Outlet"):
+            columns_to_combine.append(col)
 
-        # Split Attribute.2 by '>>' again
-        df_melted[['Attribute.2.1', 'Attribute.2.2']] = df_melted['Attribute.2'].str.split('>>', n=1, expand=True)
 
-        # Merge Attribute.2.2 and Attribute.3
-        df_melted['Attribute.3.1'] = df_melted['Attribute.2.2'].fillna('') + df_melted['Attribute.3'].fillna('')
+    columns_to_exclude = [
+        'Submission ID',
+        'Submission Date',
+        'ACESS CODE',
+        'Delivery Date 送货日期',
+        'Remark 注明','All Combined'
+    ]
 
-        # Split item name by '-'
-        df_melted[['Attribute.2.1', 'Attribute.2.2']] = df_melted['Attribute.2.1'].str.split('-', n=1, expand=True)
+    data['All Combined'] = data.apply(
+        lambda row: ' '.join([str(x) for x in row[columns_to_combine] if pd.notna(x)]),
+        axis=1)
 
-        # Convert Value to string and merge with Attribute.1
-        df_melted['Value'] = df_melted['Value'].astype(str)
-        df_melted['Merged'] = df_melted['Attribute.1'].fillna('') + df_melted['Value']
 
-        # Split by various delimiters to extract order information
-        df_melted[['Merged.1', 'Merged.2']] = df_melted['Merged'].str.split('Submission Date', n=1, expand=True)
-        df_melted[['Merged.1.1', 'Merged.1.2']] = df_melted['Merged.1'].str.split('Outlet', n=1, expand=True)
-        df_melted[['Merged.1.1.1', 'Merged.1.1.2']] = df_melted['Merged.1.1'].str.split('送货日期', n=1, expand=True)
-        df_melted[['Merged.1.1.1.1', 'Merged.1.1.1.2']] = df_melted['Merged.1.1.1'].str.split('Submission ID', n=1,
-                                                                                              expand=True)
+    data = data.drop(columns=columns_to_combine, axis=1)
 
-        # Extract numeric part (quantity) using character transition logic
-        df_melted['quantity'] = df_melted['Merged.1.1.1.1'].str.extract(r'(\d+)').astype('Int64')
 
-        # Replace empty strings with null in Merged.1.2
-        df_melted['Merged.1.2'] = df_melted['Merged.1.2'].replace('', np.nan)
 
-        # Fill missing values up and down
-        df_melted['Merged.1.1.1.2'] = df_melted['Merged.1.1.1.2'].fillna(method='ffill')
-        df_melted['Merged.1.1.2'] = df_melted['Merged.1.1.2'].fillna(method='ffill')
-        df_melted['Merged.1.2'] = df_melted['Merged.1.2'].fillna(method='ffill')
-        df_melted['Merged.2'] = df_melted['Merged.2'].fillna(method='ffill')
 
-        # Filter rows where Attribute.2.2 is not null
-        df_filtered = df_melted[df_melted['Attribute.2.2'].notna()].copy()
+    value_columns = [col for col in data.columns if col not in columns_to_exclude]
 
-        # Add index
-        df_filtered.reset_index(drop=True, inplace=True)
-        df_filtered['Index'] = df_filtered.index
 
-        # Split item details by '/'
-        df_filtered[['Attribute.2.1.1', 'Attribute.2.1.2', 'Attribute.2.1.3']] = df_filtered['Attribute.2.1'].str.split(
-            '/', expand=True)
 
-        # Split by '$'
-        df_filtered[['Attribute.2.1.2.1', 'Attribute.2.1.2.2']] = df_filtered['Attribute.2.1.2'].str.split('$', n=1,
-                                                                                                           expand=True)
+    df_melted = data.melt(
+        id_vars=columns_to_exclude,
+        value_vars=value_columns,
+        var_name='Attribute',
+        value_name='quantity'
+    )
+    df_melted = df_melted.sort_values(by=['Submission ID']).reset_index(drop=True)
+    df_melted = df_melted.dropna(subset=['quantity'])
 
-        # Split by ') '
-        df_filtered[['Attribute.2.1.2.1.1', 'Attribute.2.1.2.1.2']] = df_filtered['Attribute.2.1.2.1'].str.split(') ',
-                                                                                                                 n=1,
-                                                                                                                 expand=True)
-        df_filtered[['Attribute.2.1.3.1', 'Attribute.2.1.3.2']] = df_filtered['Attribute.2.1.3'].str.split(') ', n=1,
-                                                                                                           expand=True)
 
-        # Filter rows where Attribute.2.1.2.1.1 is not null
-        df_filtered = df_filtered[df_filtered['Attribute.2.1.2.1.1'].notna()].copy()
 
-        # Split by '(' and remove first part
-        df_filtered[['temp', 'Attribute.2.1.1.2']] = df_filtered['Attribute.2.1.1'].str.split('(', n=1, expand=True)
 
-        # Convert price to numeric (Currency type)
-        df_filtered['unit_price_base'] = pd.to_numeric(df_filtered['Attribute.2.1.1.2'], errors='coerce')
+    split_data = df_melted['Attribute'].str.split('>>', n=2, expand=True)
 
-        # Process outlet information - split by '-'
-        outlet_split = df_filtered['Merged.1.2'].str.split('-', expand=True)
-        if len(outlet_split.columns) >= 2:
-            df_filtered['bill_to'] = pd.to_numeric(outlet_split[0], errors='coerce').fillna(0).astype('Int64')
-            df_filtered['ship_to'] = pd.to_numeric(outlet_split[1], errors='coerce').fillna(0).astype('Int64')
-        else:
-            df_filtered['bill_to'] = 0
-            df_filtered['ship_to'] = 0
+    # Assign the new columns with the desired names
+    df_melted['Attribute.1'] = split_data[0]
+    df_melted['Attribute.2'] = split_data[1]
+    df_melted['Attribute.3'] = split_data[2]
 
-        # Merge UOM columns
-        df_filtered['uomu'] = df_filtered['Attribute.2.1.2.1.1'].fillna('') + df_filtered['Attribute.2.1.3.1'].fillna(
-            '')
+    df_melted.drop_duplicates(inplace=True)
 
-        # Merge item code
-        df_filtered['item_code'] = df_filtered['Attribute.2.1.2.1.2'].fillna('') + df_filtered[
-            'Attribute.2.1.3.2'].fillna('')
-        df_filtered['item_code'] = df_filtered['item_code'].str.replace(' ', '')
 
-        # Rename columns
-        df_filtered['po_no'] = df_filtered['Merged.1.1.1.2']
-        df_filtered['delivery_date'] = pd.to_datetime(df_filtered['Merged.1.1.2'], errors='coerce').dt.date
-        df_filtered['order_date'] = pd.to_datetime(df_filtered['Merged.2'], errors='coerce').dt.date
 
-        # Add conditional UOM logic
-        df_filtered['uom'] = df_filtered.apply(
-            lambda row: row['uomu'] if 'EA' in str(row['Attribute.3.1']) else 'CT', axis=1
-        )
+    # Split item name by '-'
+    df_melted[['Attribute.2.1', 'Attribute.2.2']] = df_melted['Attribute.2'].str.split('-', n=1, expand=True)
 
-        # Add category based on item code prefix
-        df_filtered['Custom1'] = df_filtered['item_code'].apply(
-            lambda x: 'F' if any(str(x).startswith(prefix) for prefix in ['FR', 'FSI', 'ZF', 'RMFR']) else 'D'
-        )
 
-        # Process unit price with conditional logic
-        df_filtered['unit_price_ct'] = pd.to_numeric(df_filtered['Attribute.2.1.2.2'], errors='coerce')
-        df_filtered['unit_price'] = df_filtered.apply(
-            lambda row: row['unit_price_ct'] if 'CT' in str(row['Attribute.3.1']) and pd.notna(row['unit_price_ct'])
-            else row['unit_price_base'] if pd.notna(row['unit_price_base'])
-            else 0.0, axis=1
-        )
 
-        # Calculate amount required
-        df_filtered['amount_required'] = df_filtered['quantity'] * df_filtered['unit_price']
 
-        # Select and clean final columns
-        final_columns = [
-            'quantity', 'po_no', 'delivery_date', 'order_date',
-            'bill_to', 'ship_to', 'item_code', 'uom', 'unit_price',
-            'Custom1', 'amount_required', 'Attribute.3.1'
-        ]
+    # Split item details by '/'
+    df_melted[['Attribute.2.1.1', 'Attribute.2.1.2', 'Attribute.2.1.3']] = df_melted['Attribute.2.1'].str.split(
+        '/', n=2,expand=True)
 
-        # Rename Custom1 to category
-        df_filtered = df_filtered.rename(columns={'Custom1': 'category'})
+    # Split by '$'
+    df_melted[['Attribute.2.1.2.1', 'Attribute.2.1.2.2']] = df_melted['Attribute.2.1.2'].str.split('$', n=1,
+                                                                                                       expand=True)
 
-        # Select final columns
-        df_final = df_filtered[final_columns].copy()
+    # Split by ')'
+    df_melted[['Attribute.2.1.2.1.1', 'Attribute.2.1.2.1.2']] = df_melted['Attribute.2.1.2.1'].str.split(')',n=1,expand=True)
+    df_melted['Attribute.2.1.2.1.1'] = df_melted['Attribute.2.1.2.1.1'].str.strip()
+    df_melted['Attribute.2.1.2.1.2'] = df_melted['Attribute.2.1.2.1.2'] .str.strip()
 
-        # Clean data types
-        df_final['quantity'] = pd.to_numeric(df_final['quantity'], errors='coerce').fillna(0).astype(int)
-        df_final['unit_price'] = pd.to_numeric(df_final['unit_price'], errors='coerce').fillna(0.0)
-        df_final['bill_to'] = pd.to_numeric(df_final['bill_to'], errors='coerce').fillna(0).astype(int)
-        df_final['ship_to'] = pd.to_numeric(df_final['ship_to'], errors='coerce').fillna(0).astype(int)
-        df_final['po_no'] = df_final['po_no'].astype(str)
 
-        return df_final
+    df_melted[['Attribute.2.1.3.1', 'Attribute.2.1.3.2']] = df_melted['Attribute.2.1.3'].str.split(')', n=1,expand=True)
+    df_melted['Attribute.2.1.3.1'] = df_melted['Attribute.2.1.3.1'].str.strip()
+    df_melted['Attribute.2.1.3.2'] = df_melted['Attribute.2.1.3.2'].str.strip()
 
-    except Exception as e:
-        print(f"Error processing data: {str(e)}")
-        return pd.DataFrame()
 
-    return data
+
+
+
+    # Split by '(' and remove first part
+    df_melted[['temp', 'Attribute.2.1.1.2']] = df_melted['Attribute.2.1.1'].str.split('(', n=1, expand=True)
+
+    # Convert price to numeric (Currency type)
+    df_melted['unit_price_base'] = pd.to_numeric(df_melted['Attribute.2.1.1.2'], errors='coerce')
+
+    # Process outlet information - split by '-'
+    outlet_split = df_melted['All Combined'].str.split('-', expand=True)
+    if len(outlet_split.columns) >= 2:
+        df_melted['bill_to'] = pd.to_numeric(outlet_split[0], errors='coerce').fillna(0).astype('Int64')
+        df_melted['ship_to'] = pd.to_numeric(outlet_split[1], errors='coerce').fillna(0).astype('Int64')
+    else:
+        df_melted['bill_to'] = 0
+        df_melted['ship_to'] = 0
+
+    # Merge UOM columns
+    df_melted['uomu'] = df_melted['Attribute.2.1.2.1.1'].fillna('') + df_melted['Attribute.2.1.3.1'].fillna(
+        '')
+
+    # Merge item code
+    df_melted['item_code'] = df_melted['Attribute.2.1.2.1.2'].fillna('') + df_melted[
+        'Attribute.2.1.3.2'].fillna('')
+    df_melted['item_code'] = df_melted['item_code'].str.replace(' ', '')
+
+    df_melted = df_melted.rename(columns={'Submission ID': 'po_no'})
+    df_melted = df_melted.rename(columns={'Submission Date': 'order_date'})
+    df_melted = df_melted.rename(columns={'Delivery Date 送货日期': 'delivery_date'})
+
+
+    # Rename columns
+
+
+    # Add conditional UOM logic
+    df_melted['uom'] = df_melted.apply(
+        lambda row: row['uomu'] if 'EA' in str(row['Attribute.3']) else 'CT', axis=1
+    )
+
+    # Add category based on item code prefix
+    df_melted['Custom1'] = df_melted['item_code'].apply(
+        lambda x: 'F' if any(str(x).startswith(prefix) for prefix in ['FR', 'FSI', 'ZF', 'RMFR','RMVES']) else 'D'
+    )
+
+    # Process unit price with conditional logic
+    df_melted['unit_price_ct'] = pd.to_numeric(df_melted['Attribute.2.1.2.2'], errors='coerce')
+    df_melted['Attribute.2.1.1.2'] = df_melted['Attribute.2.1.1.2'].str.replace('$', '')
+    df_melted['unit_price_ea'] = pd.to_numeric(df_melted['Attribute.2.1.1.2'], errors='coerce')
+
+    df_melted['unit_price'] = df_melted.apply(
+        lambda row: row['unit_price_ct'] if 'CT' in str(row['uom']) else row['unit_price_ea'], axis=1
+    )
+    df_melted['unit_price'] = df_melted['unit_price'].fillna(df_melted['unit_price_ea'])
+
+
+    # Calculate amount required
+    df_melted['amount_required'] = df_melted['quantity'] * df_melted['unit_price']
+
+    # Select and clean final columns
+    final_columns = [
+        'quantity', 'po_no', 'delivery_date', 'order_date',
+        'bill_to', 'ship_to', 'item_code', 'uom', 'unit_price',
+        'Type', 'amount_required', 'Attribute.3','Attribute.2.2','order_type'
+    ]
+
+    # Rename Custom1 to category
+    df_melted = df_melted.rename(columns={'Custom1': 'Type'})
+    df_melted['po_no'] = df_melted['po_no'].astype(str) + "-" + df_melted['Type'].astype(str)
+
+
+        # Using np.where for conditional assignment, which is efficient
+    df_melted['order_type'] = df_melted['Type'].apply(lambda x: 1019 if x == 'F' else 1016)
+
+
+
+
+    # Select final columns
+    df_final = df_melted[final_columns].copy()
+
+    # Clean data types
+    df_final['quantity'] = pd.to_numeric(df_final['quantity'], errors='coerce').fillna(0).astype(int)
+    df_final['unit_price'] = pd.to_numeric(df_final['unit_price'], errors='coerce').fillna(0.0)
+    df_final['bill_to'] = pd.to_numeric(df_final['bill_to'], errors='coerce').fillna(0).astype(int)
+    df_final['ship_to'] = pd.to_numeric(df_final['ship_to'], errors='coerce').fillna(0).astype(int)
+    df_final['po_no'] = df_final['po_no'].astype(str)
+
+    df_final.dropna(subset=['unit_price'], inplace=True)
+    df_final['order_date'] = pd.to_datetime(df_final['order_date'], errors='coerce').dt.date
+    df_final['buyer_code'] = None
+    df_final.rename(columns={'ship_to': 'business_outlet'}, inplace=True)
+    df_final['Supplier'] = "Lim Siang Huat Pte Ltd"
+    df_final['weight'] = None
+    df_final.rename(columns={
+        'item_code': 'supplier_item_code',
+        'quantity': 'quantity_required',
+        'delivery_date': 'delivery_date_required',
+        'Attribute.2.2': 'item_name'
+    }, inplace=True)
+
+
+
+    df_final['quantity_supplier'] = df_final['quantity_required']
+    df_final = df_final[[
+        "po_no", "buyer_code", "business_outlet", "Supplier", "order_date",
+        "supplier_item_code", "delivery_date_required", "item_name", "uom",
+        "quantity_required", "quantity_supplier", "weight", "unit_price", "bill_to","amount_required","order_type"
+    ]].copy()
+
+    df_final['amount_supplier'] = df_final['amount_required']
+
+
+    df_final['delivery_date_supplier'] = df_final['delivery_date_required']
+    # #"Added Custom4"
+    df_final['specific_request'] = None
+
+    # #"Duplicated Column3" & #"Renamed Columns3"
+    df_final['purchase_order_date'] = df_final['order_date']
+
+    # #"Added Custom5"
+    df_final['remark'] = None
+    final_column_order = [
+        "po_no", "buyer_code", "business_outlet", "Supplier", "order_date",
+        "supplier_item_code", "item_name", "uom", "quantity_required",
+        "quantity_supplier", "weight", "unit_price", "amount_supplier",
+        "amount_required", "delivery_date_required", "delivery_date_supplier",
+        "specific_request", "purchase_order_date", "remark", "bill_to", "order_type"
+    ]
+
+
+
+    if 'df_melted' in locals():
+        del df_melted
+        print("df_melted deleted.")
+    if 'data' in locals():
+        del data
+        print("df_final deleted.")
+
+    if combine_df is not None and not combine_df.empty:
+        df_final = df_final.merge(combine_df, on='po_no', how='left')
+        df_final = df_final[df_final['Custom'].isnull()]
+        df_final = df_final.drop(columns=['Custom'])
+
+    for col in final_column_order:
+        if col not in df_final.columns:
+            df_final[col] = None
+
+    df_final = df_final[final_column_order]
+
+
+
+    return df_final
+
+
+
+
 
 
 import os
@@ -446,9 +538,9 @@ if __name__ == '__main__':
     for sheet_name, dataframe in all_sheets.items():
         form.append(sheet_name)
 
-    combine_text_files_robust(r"C:\Feasibility\WhatsApp Order\Output WS", r"C:\Users\USER\ImportOracle\pythonProject1\dist\combined_text_robust.txt")
+    combine_text_files_robust(r"C:\Users\Admin\PycharmProjects\WhatsAppForm\Output WS", r"C:\Users\Admin\PycharmProjects\WhatsAppForm\dist\combined_text_robust.txt")
 
-    outputws = Output_WS(r"C:\Users\USER\ImportOracle\pythonProject1\dist\combined_text_robust.txt")
+    outputws = Output_WS(r"C:\Users\Admin\PycharmProjects\WhatsAppForm\dist\combined_text_robust.txt")
 
     all_data = []
     for sheet in form:
@@ -463,7 +555,7 @@ if __name__ == '__main__':
         sys.exit("No data available. Exiting...")
 
     # Save the transformed data to a new Excel file
-    pozg_file = r"C:\Simplr\WhatsAPP_simplr\Import\PO_ZG.xlsx"
+    pozg_file = r"C:\Users\Admin\PycharmProjects\WhatsAppForm\PO_ZG.xlsx"
 
     all_data.to_excel(pozg_file, index=False)
     Export_Query(pozg_file,receiver_email)
