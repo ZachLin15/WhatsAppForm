@@ -7,7 +7,7 @@ logging.basicConfig(filename=r'C:\Users\USER\ImportOracle\pythonProject1\Log\Mai
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 start_time = time.time()  # Record start time
-try:
+"""try:
     print("Importing WhatsApp1")
     subprocess.run(['python', 'C:\\Users\\USER\\ImportOracle\\pythonProject1\\dist\\WhatApp1.py'])
 except Exception as e:
@@ -34,6 +34,12 @@ except Exception as e:
 try:
     print("Importing Yakun")
     subprocess.run(['python', 'C:\\Users\\USER\\ImportOracle\\pythonProject1\\dist\\Yakun.py'])
+except Exception as e:
+        logging.error(f"Yakun {e}")"""
+
+try:
+    print("Importing Eric Form")
+    subprocess.run(['python', 'C:\\Users\\USER\\ImportOracle\\pythonProject1\\dist\\EricForm.py'])
 except Exception as e:
         logging.error(f"Yakun {e}")
 
